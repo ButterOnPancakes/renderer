@@ -1,0 +1,47 @@
+# CMake build files
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+CMakeLists.txt.user
+Makefile
+install_manifest.txt
+Testing/
+CTestTestfile.cmake
+CMakeFiles/
+*.cmake~
+*.dir
+build/
+build-*/
+
+# Compiled object files and libraries
+*.o
+*.obj
+*.so
+*.a
+*.lib
+*.dll
+*.dylib
+*.exe
+*.out
+
+# Minifb build artifacts
+minifb/build/
+minifb/*.o
+minifb/*.obj
+minifb/*.so
+minifb/*.dll
+minifb/*.dylib
+minifb/*.a
+
+# Editor/IDE files
+*.swp
+*~
+*.tmp
+*.log
+.vscode/
+.idea/
+*.suo
+*.user
+*.userosscache
+*.sln
+*.vcxproj*
