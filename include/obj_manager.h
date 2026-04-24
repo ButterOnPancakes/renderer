@@ -2,20 +2,20 @@
 #define OBJECT_MANAGER_H
 
 #include "renderer.h"
+
 #include <stdlib.h>
 
 typedef struct {
-    double x, y, z;
-} Point;
+    float x, y, z;
+} Vertex;
 
 typedef struct {
-    Point p1, p2, p3;
-    Color color;
-} Triangle;
+    Vertex v1, v2, v3;
+} Face;
 
 typedef struct {
     size_t size;
-    Triangle *triangles;
+    Face *faces;
 } ObjModel;
 
 void obj_model_load(ObjModel *obj, const char *filepath);

@@ -12,17 +12,17 @@ void normalize_model(ObjModel *model) {
 
     // 1. Initialize bounds with the first point of the first triangle
     double min_x, max_x, min_y, max_y, min_z, max_z;
-    min_x = max_x = model->triangles[0].p1.x;
-    min_y = max_y = model->triangles[0].p1.y;
-    min_z = max_z = model->triangles[0].p1.z;
+    min_x = max_x = model->faces[0].v1.x;
+    min_y = max_y = model->faces[0].v1.y;
+    min_z = max_z = model->faces[0].v1.z;
 
-    // 2. Find the actual min/max across all triangles
+    // 2. Find the actual min/max across all faces
     for (size_t i = 0; i < model->size; i++) {
-        Point p[3] = {model->triangles[i].p1, model->triangles[i].p2, model->triangles[i].p3};
+        Vertex v[3] = {model->faces[i].v1, model->faces[i].v2, model->faces[i].v3};
         for (int j = 0; j < 3; j++) {
-            if (p[j].x < min_x) min_x = p[j].x; if (p[j].x > max_x) max_x = p[j].x;
-            if (p[j].y < min_y) min_y = p[j].y; if (p[j].y > max_y) max_y = p[j].y;
-            if (p[j].z < min_z) min_z = p[j].z; if (p[j].z > max_z) max_z = p[j].z;
+            if (v[j].x < min_x) min_x = v[j].x; if (v[j].x > max_x) max_x = v[j].x;
+            if (v[j].y < min_y) min_y = v[j].y; if (v[j].y > max_y) max_y = v[j].y;
+            if (v[j].z < min_z) min_z = v[j].z; if (v[j].z > max_z) max_z = v[j].z;
         }
     }
 
@@ -41,14 +41,14 @@ void normalize_model(ObjModel *model) {
     if (diff_z > max_diff) max_diff = diff_z;
 
     // 4. Apply transformation to every vertex
-    // Formula: P_new = (P_old - Center) / (Max_Dimension / 2)
+    // Formula: v_new = (v_old - Center) / (Max_Dimension / 2)
     // This puts the model in a -1 to 1 range.
     for (size_t i = 0; i < model->size; i++) {
-        Point *p[3] = {&model->triangles[i].p1, &model->triangles[i].p2, &model->triangles[i].p3};
+        Vertex *v[3] = {&model->faces[i].v1, &model->faces[i].v2, &model->faces[i].v3};
         for (int j = 0; j < 3; j++) {
-            p[j]->x = (p[j]->x - center_x) / (max_diff / 2.0);
-            p[j]->y = (p[j]->y - center_y) / (max_diff / 2.0);
-            p[j]->z = (p[j]->z - center_z) / (max_diff / 2.0);
+            v[j]->x = (v[j]->x - center_x) / (max_diff / 2.0);
+            v[j]->y = (v[j]->y - center_y) / (max_diff / 2.0);
+            v[j]->z = (v[j]->z - center_z) / (max_diff / 2.0);
         }
     }
 }
@@ -58,11 +58,11 @@ void obj_model_load(ObjModel *model, const char *filepath) {
     if (!source) return;
 
     // Use the dynamic array logic you already wrote (it's good!)
-    size_t p_cap = 10, p_count = 0;
-    Point *points = malloc(p_cap * sizeof(Point));
+    size_t v_cap = 10, v_count = 0;
+    Vertex *vertices = malloc(v_cap * sizeof(Vertex));
 
-    size_t t_cap = 10, t_count = 0;
-    Triangle *triangles = malloc(t_cap * sizeof(Triangle));
+    size_t f_cap = 10, f_count = 0;
+    Face *faces = malloc(f_cap * sizeof(Face));
 
     char line[256];
     while (fgets(line, sizeof(line), source)) {
@@ -71,62 +71,67 @@ void obj_model_load(ObjModel *model, const char *filepath) {
 
         // 2. Parse Vertices
         if (line[0] == 'v' && line[1] == ' ') {
-            if (p_count >= p_cap) {
-                p_cap *= 2;
-                points = realloc(points, p_cap * sizeof(Point));
+            if (v_count >= v_cap) {
+                v_cap *= 2;
+                vertices = realloc(vertices, v_cap * sizeof(Vertex));
             }
-            sscanf(line, "v %lf %lf %lf", &points[p_count].x, &points[p_count].y, &points[p_count].z);
-            p_count++;
+            sscanf(line, "v %f %f %f", &vertices[v_count].x, &vertices[v_count].y, &vertices[v_count].z);
+            v_count++;
         } 
         
         // 3. Parse Faces (Ignore vt and vn for now to keep it simple)
         else if (line[0] == 'f' && line[1] == ' ') {
-            if (t_count >= t_cap) {
-                t_cap *= 2;
-                triangles = realloc(triangles, t_cap * sizeof(Triangle));
+            if (f_count >= f_cap) {
+                f_cap *= 2;
+                faces = realloc(faces, f_cap * sizeof(Face));
             }
-
-            int v1, vt1, vn1, v2, vt2, vn2, v3, vt3, vn3;
-            // This sscanf handles the f v/vt/vn format
-            int matches = sscanf(line, "f %d/%d/%d %d/%d/%d %d/%d/%d", 
-                                &v1, &vt1, &vn1, &v2, &vt2, &vn2, &v3, &vt3, &vn3);
-            
-            if (matches == 9) {
+            int v1, v2, v3;
+            // 1. f v/vt/vn (Full)
+            // 2. f v/vt    (No normals)
+            // 3. f v//vn   (No textures)
+            // 4. f v       (Indices only)
+            if (
+                sscanf(line, "f %d/%*d/%*d %d/%*d/%*d %d/%*d/%*d", &v1, &v2, &v3) == 3 ||
+                sscanf(line, "f %d/%*d %d/%*d %d/%*d",             &v1, &v2, &v3) == 3 ||
+                sscanf(line, "f %d//%*d %d//%*d %d//%*d",         &v1, &v2, &v3) == 3 ||
+                sscanf(line, "f %d %d %d",                         &v1, &v2, &v3) == 3
+            ) {
                 // .obj indices start at 1, so we subtract 1
-                triangles[t_count].p1 = points[v1 - 1];
-                triangles[t_count].p2 = points[v2 - 1];
-                triangles[t_count].p3 = points[v3 - 1];
-                triangles[t_count].color = rand()%0xFFFFFF;
-                t_count++;
+                faces[f_count].v1 = vertices[v1 - 1];
+                faces[f_count].v2 = vertices[v2 - 1];
+                faces[f_count].v3 = vertices[v3 - 1];
+                f_count++;
             }
         }
     }
 
     fclose(source);
-    free(points);
+    free(vertices);
 
-    model->size = t_count;
-    model->triangles = triangles;
+    model->size = f_count;
+    model->faces = faces;
 
     normalize_model(model);
 }
 
 void obj_model_destroy(ObjModel *obj) {
-    assert(obj != NULL && obj->triangles != NULL);
-    free(obj->triangles);
+    assert(obj != NULL && obj->faces != NULL);
+    free(obj->faces);
 }
 
 void buffer_draw_obj(FrameBuffer *buffer, ObjModel *obj, Color color) {
-    assert(buffer != NULL && obj != NULL && obj->triangles != NULL && obj->size > 0);
+    assert(buffer != NULL && obj != NULL && obj->faces != NULL && obj->size > 0);
 
     double scale = 2.001;
-    for(size_t i = 0; i < obj->size; i++) {
-        int x1 = (1 - obj->triangles[i].p1.x) * buffer->width / scale;
-        int y1 = (1 - obj->triangles[i].p1.y) * buffer->height / scale;
-        int x2 = (1 - obj->triangles[i].p2.x) * buffer->width / scale;
-        int y2 = (1 - obj->triangles[i].p2.y) * buffer->height / scale;
-        int x3 = (1 - obj->triangles[i].p3.x) * buffer->width / scale;
-        int y3 = (1 - obj->triangles[i].p3.y) * buffer->height / scale;
-        buffer_draw_filled_triangle(buffer, x1, y1, x2, y2, x3, y3, obj->triangles[i].color);
+    for (size_t i = 0; i < obj->size; i++) {
+        Triangle tri;
+        tri.p1.x = (1 - obj->faces[i].v1.x) * buffer->width / scale;
+        tri.p1.y = (1 - obj->faces[i].v1.y) * buffer->height / scale;
+        tri.p2.x = (1 - obj->faces[i].v2.x) * buffer->width / scale;
+        tri.p2.y = (1 - obj->faces[i].v2.y) * buffer->height / scale;
+        tri.p3.x = (1 - obj->faces[i].v3.x) * buffer->width / scale;
+        tri.p3.y = (1 - obj->faces[i].v3.y) * buffer->height / scale;
+        buffer_draw_filled_triangle(buffer, tri, 0x0000FF);
+        buffer_draw_triangle(buffer, tri, 0xFF0000);
     }
 }

@@ -1,6 +1,9 @@
 cmake_minimum_required(VERSION 3.10)
 project(MyRenderer)
 
+# Find the OpenMP package
+find_package(OpenMP REQUIRED)
+
 # 1. Tell CMake to include the MiniFB project
 # This looks into the minifb folder and reads its configuration
 add_subdirectory(minifb)
@@ -9,11 +12,11 @@ add_subdirectory(minifb)
 add_executable(my_renderer src/main.c
     src/minifb.c
     src/graphics/renderer.c
-    src/graphics/obj_manager.c)
+    src/graphics/obj_manager.c
+    src/utils/math_utils.c)
 
 # 3. Link everything together
-# This automatically handles Wayland, X11, and Math libraries for you
-target_link_libraries(my_renderer PRIVATE minifb)
+target_link_libraries(my_renderer PRIVATE minifb OpenMP::OpenMP_C)
 
 # 4. Tell your code where to find the "MiniFB.h" header
 target_include_directories(my_renderer PRIVATE
