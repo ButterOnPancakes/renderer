@@ -1,38 +1,61 @@
 #include "minifb.h"
 
-#include "renderer.h"
-#include "obj_manager.h"
+#include "graphics/renderer.h"
+#include "graphics/camera.h"
+#include "graphics/mesh.h"
 
 #include <stdint.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <time.h>
 
-#define WIDTH  800
-#define HEIGHT 600
+#define WIDTH  256
+#define HEIGHT 256
+
+void msleep(long msec) {
+    struct timespec ts;
+
+    ts.tv_sec = msec / 1000;
+    ts.tv_nsec = (msec % 1000) * 1000000;
+
+    nanosleep(&ts, &ts);
+}
 
 int main() {
     srand(time(NULL));
     Window *window = window_open("Computer Graphics goes brrrr", WIDTH, HEIGHT);
     if (!window) return -1;
 
-    FrameBuffer buffer; buffer_init(&buffer, WIDTH, HEIGHT);
+    Renderer renderer; renderer_init(&renderer, WIDTH, HEIGHT);
+    Camera cam; camera_init(&cam);
+    cam.transform.pos.z = 5;
 
-    ObjModel* obj = malloc(sizeof(ObjModel));
-    obj_model_load(obj, "assets/stone.obj");
-    
-    do {
-        buffer_clear(&buffer, 0x000000);
+    Mesh mesh; mesh_load(&mesh, "assets/head.obj");
+    Transform transform = {
+        .pos = (Vec3) {0, 0, 0},
+        .rot = (Vec3) {0, 0, 0},
+        .size = (Vec3) {1, 1, 1}
+    };
 
-        buffer_draw_obj(&buffer, obj, 0xFF0000);
+    double time = 0;
+    while (true) {
+        camera_update(&cam, time);
+
+        renderer_clear(&renderer, 0x000000);
+
+        renderer_draw_mesh(&renderer, &mesh, transform, &cam, 0xFF0000);
         
-        if (!window_update_buffer(window, buffer.buffer)) break;
-    } while (window_update_window(window));
-
+        if (!window_update_buffer(window, renderer.frame_buffer)) break;
+        if (!window_update_window(window)) break;
+        
+        msleep(1e3 / 60.);
+        time += 1 / 60.;
+    }
     window = NULL;
 
-    buffer_destroy(&buffer);
-    obj_model_destroy(obj);
-    free(obj);
+    renderer_destroy(&renderer);
+    mesh_destroy(&mesh);
+    camera_destroy(&cam);
 
     return 0;
 }

@@ -12,8 +12,10 @@ add_subdirectory(minifb)
 add_executable(my_renderer src/main.c
     src/minifb.c
     src/graphics/renderer.c
-    src/graphics/obj_manager.c
-    src/utils/math_utils.c)
+    src/graphics/mesh.c
+    src/utils/math_utils.c
+    src/utils/color_utils.c
+    src/graphics/camera.c)
 
 # 3. Link everything together
 target_link_libraries(my_renderer PRIVATE minifb OpenMP::OpenMP_C)
