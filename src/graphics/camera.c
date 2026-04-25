@@ -8,16 +8,12 @@ void camera_init(Camera *cam) {
     cam->transform.size = (Vec3) {.x = 1, .y = 1, .z = 1};
     cam->aspect_ratio = 1;
     cam->depth_near = 0.1;
-    cam->depth_far = 100000;
+    cam->depth_far = 100;
     cam->fov = M_PI / 3;
 }
 void camera_destroy(Camera *cam) {}
 
-void camera_update(Camera *cam, double time) {
-    double dist = 10;
-    cam->transform.pos = (Vec3) {.x = 10 * sin(time), .z = 10 * cos(time)};
-    cam->transform.rot.y = time;
-}
+void camera_update(Camera *cam, double time) {}
 
 Mat4 mat4_model(Transform t) {
     Mat4 translation = mat4_translate(t.pos.x, t.pos.y, t.pos.z);
@@ -64,8 +60,8 @@ Mat4 mat4_viewport(int x, int y, int w, int h) {
     // x,y,z : [-1, 1]^3
     // y need to be reversed
     return (Mat4) {{
-        {w/2., 0, 0, w/2.},
-        {0, -h/2., 0, h/2.},
+        {w/2., 0, 0, x + w/2.},
+        {0, -h/2., 0, y + h/2.},
         {0, 0, 1/2., 1/2.},
         {0, 0, 0, 1}
     }};

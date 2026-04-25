@@ -2,7 +2,7 @@
 
 #include <math.h>
 
-float signed_triangle_area(int ax, int ay, int bx, int by, int cx, int cy) {
+float signed_triangle_area(float ax, float ay, float bx, float by, float cx, float cy) {
     return .5*((by-ay)*(bx+ax) + (cy-by)*(cx+bx) + (ay-cy)*(ax+cx));
 }
 
@@ -130,6 +130,31 @@ Mat3 mat3_inverse(Mat3 m) {
     res.m[2][0] = (m.m[1][0] * m.m[2][1] - m.m[1][1] * m.m[2][0]) * inv_det;
     res.m[2][1] = (m.m[0][1] * m.m[2][0] - m.m[0][0] * m.m[2][1]) * inv_det;
     res.m[2][2] = (m.m[0][0] * m.m[1][1] - m.m[1][0] * m.m[0][1]) * inv_det;
+    return res;
+}
+
+Mat3 mat3_rotate_x(float angle) {
+    float s = sinf(angle);
+    float c = cosf(angle);
+    Mat3 res = mat3_identity();
+    res.m[1][1] = c;  res.m[1][2] = -s;
+    res.m[2][1] = s;  res.m[2][2] = c;
+    return res;
+}
+Mat3 mat3_rotate_y(float angle) {
+    float s = sinf(angle);
+    float c = cosf(angle);
+    Mat3 res = mat3_identity();
+    res.m[0][0] = c;  res.m[0][2] = s;
+    res.m[2][0] = -s; res.m[2][2] = c;
+    return res;
+}
+Mat3 mat3_rotate_z(float angle) {
+    float s = sinf(angle);
+    float c = cosf(angle);
+    Mat3 res = mat3_identity();
+    res.m[0][0] = c;  res.m[0][1] = -s;
+    res.m[1][0] = s;  res.m[1][1] = c;
     return res;
 }
 

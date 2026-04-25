@@ -14,7 +14,7 @@
 #define clamp(v, lo, hi) (max(lo, min(v, hi)))
 #define lerp(a, b, t) ((a) + (t) * ((b) - (a)))
 
-float signed_triangle_area(int ax, int ay, int bx, int by, int cx, int cy);
+float signed_triangle_area(float ax, float ay, float bx, float by, float cx, float cy);
 
 // --- Vector Definitions ---
 
@@ -67,6 +67,10 @@ Mat3 mat3_identity(void);
 Mat3 mat3_mul(Mat3 a, Mat3 b);
 Vec3 mat3_vec3_mul(Mat3 m, Vec3 v);
 Mat3 mat3_inverse(Mat3 m);
+
+Mat3 mat3_rotate_x(float angle);
+Mat3 mat3_rotate_y(float angle);
+Mat3 mat3_rotate_z(float angle);
 
 // --- Mat4 Operations ---
 

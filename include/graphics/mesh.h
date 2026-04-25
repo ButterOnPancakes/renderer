@@ -10,13 +10,15 @@ typedef struct {
 } Vertex;
 
 typedef struct {
-    Vertex v1, v2, v3;
+    int v1, v2, v3; // Indices into Mesh.vertices
     Color color;
 } Face;
 
 typedef struct {
-    size_t size;
+    Vertex *vertices;
+    size_t num_vertices;
     Face *faces;
+    size_t num_faces;
 } Mesh;
 
 void mesh_load(Mesh *mesh, const char *filepath);

@@ -3,6 +3,7 @@
 #include <assert.h>
 #include <float.h>
 #include <math.h>
+#include <stdbool.h>
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
@@ -30,33 +31,64 @@ void renderer_destroy(Renderer *renderer) {
 }
 
 // Rendering
-Vec3 project_vertex(Vertex v, Mat4 MVP, Mat4 viewport) {
+typedef struct {
+    Vec3 pos;
+    bool visible;
+} ProjectedVertex;
+
+ProjectedVertex project_vertex(Vertex v, Mat4 MVP, Mat4 viewport) {
     Vec4 p;
     p.x = v.x; p.y = v.y; p.z = v.z; p.w = 1;
     p = mat4_vec4_mul(MVP, p);
+    
+    // Near plane clipping check
+    if (p.w <= 0) {
+        return (ProjectedVertex){.visible = false};
+    }
+
     p = vec4_ndc(p);
     p = mat4_vec4_mul(viewport, p);
-    return (Vec3) {.x = p.x, .y = p.y, .z = p.z};
+    return (ProjectedVertex){.pos = (Vec3) {.x = p.x, .y = p.y, .z = p.z}, .visible = true};
 }
 void renderer_draw_mesh(Renderer *renderer, Mesh *mesh, Transform trans, Camera *cam, Color color) {
-    assert(renderer != NULL && mesh != NULL && mesh->faces != NULL && mesh->size > 0);
+    assert(renderer != NULL && mesh != NULL && mesh->faces != NULL && mesh->num_faces > 0);
 
     Mat4 model = mat4_model(trans);
     Mat4 view = mat4_view(cam);
-    Mat4 proj = mat4_identity();//mat4_projection(cam);
+    Mat4 proj = mat4_projection(cam);
     Mat4 MVP = mat4_mul(proj, mat4_mul(view, model));
     Mat4 viewport = mat4_viewport(0, 0, renderer->width, renderer->height);
 
-    for (size_t i = 0; i < mesh->size; i++) {
-        Vec3 p1 = project_vertex(mesh->faces[i].v1, MVP, viewport);
-        Vec3 p2 = project_vertex(mesh->faces[i].v2, MVP, viewport);
-        Vec3 p3 = project_vertex(mesh->faces[i].v3, MVP, viewport);
+    // 1. Create a cache for projected vertices
+    ProjectedVertex *vertex_cache = malloc(mesh->num_vertices * sizeof(ProjectedVertex));
+    assert(vertex_cache != NULL);
 
-        // Backface culling
-        if (signed_triangle_area(p1.x, p1.y, p2.x, p2.y, p3.x, p3.y) <= 0) continue;
+    // 2. Project all vertices once
+    #pragma omp parallel for
+    for (size_t i = 0; i < mesh->num_vertices; i++) {
+        vertex_cache[i] = project_vertex(mesh->vertices[i], MVP, viewport);
+    }
+
+    // 3. Draw faces using cached vertices
+    for (size_t i = 0; i < mesh->num_faces; i++) {
+        ProjectedVertex pv1 = vertex_cache[mesh->faces[i].v1];
+        ProjectedVertex pv2 = vertex_cache[mesh->faces[i].v2];
+        ProjectedVertex pv3 = vertex_cache[mesh->faces[i].v3];
+
+        if (!pv1.visible || !pv2.visible || !pv3.visible) continue;
+
+        Vec3 p1 = pv1.pos;
+        Vec3 p2 = pv2.pos;
+        Vec3 p3 = pv3.pos;
+
+        // Backface culling: After viewport flip, CCW (front) becomes negative area.
+        // We cull triangles with area >= 0 (backfaces or degenerate).
+        if (signed_triangle_area(p1.x, p1.y, p2.x, p2.y, p3.x, p3.y) >= 0) continue;
 
         renderer_draw_filled_triangle(renderer, p1, p2, p3, mesh->faces[i].color);
     }
+
+    free(vertex_cache);
 }
 
 // 2D stuff
@@ -76,14 +108,15 @@ void renderer_draw_line(Renderer *renderer, Vec3 p1, Vec3 p2, Color color) {
         0 <= x2 && x2 < renderer->width && 0 <= y2 && y2 < renderer->height
     );
     float dx = x2 - x1, dy = y2 - y1;
-    int steps = abs(dx) >= abs(dy) ? abs(dx) : abs(dy); //To avoid skipping dots
-    dx = dx / steps; dy = dy / steps;
+    int steps = fabsf(dx) >= fabsf(dy) ? (int)fabsf(dx) : (int)fabsf(dy); //To avoid skipping dots
+    dx = dx / (float)steps; dy = dy / (float)steps;
     float x = x1, y = y1;
 
     float z = p1.z, dz = (p2.z - p1.z) / (float)steps;
     for (int i = 0; i < steps; i++) {
-        renderer->depth_buffer[(int)(x + y * renderer->width)] = z;
-        renderer->frame_buffer[(int)(x + y * renderer->width)] = color;
+        int idx = (int)(x + y * renderer->width);
+        renderer->depth_buffer[idx] = z;
+        renderer->frame_buffer[idx] = color;
         x += dx;
         y += dy;
         z += dz;
@@ -91,30 +124,46 @@ void renderer_draw_line(Renderer *renderer, Vec3 p1, Vec3 p2, Color color) {
 }
 
 void renderer_draw_filled_triangle(Renderer *renderer, Vec3 p1, Vec3 p2, Vec3 p3, Color color) {
-    int ax = p1.x; int ay = p1.y;
-    int bx = p2.x; int by = p2.y;
-    int cx = p3.x; int cy = p3.y;
+    float ax = p1.x; float ay = p1.y;
+    float bx = p2.x; float by = p2.y;
+    float cx = p3.x; float cy = p3.y;
     
-    int min_x = min(min(ax, bx), cx); int min_y = min(min(ay, by), cy);
-    int max_x = max(max(ax, bx), cx); int max_y = max(max(ay, by), cy);
+    int min_x = (int)floorf(min(min(ax, bx), cx)); 
+    int min_y = (int)floorf(min(min(ay, by), cy));
+    int max_x = (int)ceilf(max(max(ax, bx), cx)); 
+    int max_y = (int)ceilf(max(max(ay, by), cy));
+
     float total_area = signed_triangle_area(ax, ay, bx, by, cx, cy);
-    if (fabs(total_area) <= FLT_EPSILON) return;
-    float inv_total_area = 1.0 / total_area;
+    if (fabsf(total_area) <= FLT_EPSILON) return;
+    float inv_total_area = 1.0f / total_area;
 
     #pragma omp parallel for
-    for (int x = min_x; x <= max_x; x++) {
-        for (int y = min_y; y <= max_y; y++) {
+    for (int y = min_y; y <= max_y; y++) {
+        for (int x = min_x; x <= max_x; x++) {
             if(!(0 <= x && x < renderer->width && 0 <= y && y < renderer->height)) continue;
 
-            float alpha = signed_triangle_area(x, y, bx, by, cx, cy) * inv_total_area;
-            float beta  = signed_triangle_area(x, y, cx, cy, ax, ay) * inv_total_area;
-            float gamma = signed_triangle_area(x, y, ax, ay, bx, by) * inv_total_area;
-            if (alpha < 0 || beta < 0 || gamma < 0) continue; // negative barycentric coordinate => the pixel is outside the triangle
+            float fx = (float)x + 0.5f;
+            float fy = (float)y + 0.5f;
+
+            float alpha = signed_triangle_area(fx, fy, bx, by, cx, cy) * inv_total_area;
+            float beta  = signed_triangle_area(fx, fy, cx, cy, ax, ay) * inv_total_area;
+            float gamma = signed_triangle_area(fx, fy, ax, ay, bx, by) * inv_total_area;
+            
+            if (alpha < 0 || beta < 0 || gamma < 0) continue; 
 
             float z = alpha * p1.z + beta * p2.z + gamma * p3.z;
-            if (z < renderer->depth_buffer[x + y * renderer->width]) {
-                renderer->depth_buffer[x + y * renderer->width] = z;
-                renderer->frame_buffer[x + y * renderer->width] = color;
+            int pixel_index = x + y * renderer->width;
+            
+            // Note: Simple depth test without atomic is not perfectly thread-safe but often works for simple renderers.
+            // For true correctness under OpenMP, we'd need a more complex solution or critical section.
+            if (z < renderer->depth_buffer[pixel_index]) {
+                #pragma omp critical
+                {
+                    if (z < renderer->depth_buffer[pixel_index]) {
+                        renderer->depth_buffer[pixel_index] = z;
+                        renderer->frame_buffer[pixel_index] = color;
+                    }
+                }
             }
         }
     }
