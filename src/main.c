@@ -9,8 +9,8 @@
 #include <stdlib.h>
 #include <time.h>
 
-#define WIDTH  256
-#define HEIGHT 256
+#define WIDTH  1024
+#define HEIGHT 1024
 
 void msleep(long msec) {
     struct timespec ts;
@@ -30,7 +30,7 @@ int main() {
     Camera cam; camera_init(&cam);
     cam.transform.pos.z = 5;
 
-    Mesh mesh; mesh_load(&mesh, "assets/car.obj");
+    Mesh mesh; mesh_load(&mesh, "assets/3.obj");
     Transform transform = {
         .pos = (Vec3) {0, 0, 0},
         .rot = (Vec3) {0, 0, 0},
